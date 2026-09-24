@@ -3,6 +3,10 @@
 //   Jared S Tarbell
 //   September 13, 2020
 //   The Treehouse, Orcas Island, WA
+//
+// the plan lies on the floor. some endpoints send up a faint
+// vertical, capped with a bright dot. the camera orbits the
+// center, and the mouse shifts that view.
 
 PGraphics bg;
 PGraphics spg;
@@ -36,12 +40,25 @@ int snumPointEnds = 1000000000;
 
 GoodPalette pal;
 
+float orbitAngle = 0.4;
+boolean pointer = false;
+boolean capture = false;
+String capturePath = "";
+int settleSteps = 110;
+int grown = 0;
+int captureFrames = 0;
+
+void settings() {
+  size(1280, 900, P3D);
+  smooth(4);
+}
+
 void setup() {
-  //size(1000,1000,FX2D);
-  fullScreen(FX2D);
   background(0);
   noFill();
   strokeWeight(2.0);
+  hint(DISABLE_DEPTH_TEST);
+  applyArgs();
   
   pal = new GoodPalette(512);
   //pal.readXML("jacksonFloor.xml",256);
@@ -63,6 +80,17 @@ void setup() {
   imageMode(CENTER);
   
   reset();
+}
+
+void applyArgs() {
+  if (args == null) return;
+  for (String a : args) {
+    if (a == null) continue;
+    if (a.equals("--capture")) capture = true;
+    else if (a.startsWith("--out=")) capturePath = a.substring(6);
+    else if (a.startsWith("--steps=")) settleSteps = parseInt(a.substring(8));
+    else if (a.startsWith("--seed=")) randomSeed(parseInt(a.substring(7)));
+  }
 }
 
 void reset() {
@@ -157,8 +185,17 @@ void reset() {
 }
 
 void draw() {
-    
-  if (expand) substitute();
+  if (expand) {
+    int burst = capture ? 40 : 1;
+    for (int i = 0; i < burst; i++) {
+      if (capture && grown >= settleSteps) {
+        expand = false;
+        break;
+      }
+      substitute();
+      grown++;
+    }
+  }
 
   spg.beginDraw();
   int kmax = 1;
@@ -177,6 +214,27 @@ void draw() {
   
   // color brightness oscillates as eons go
   colorStroke = color(255,random(222,255));
+  renderView();
+
+  if (capture && grown >= settleSteps) {
+    captureFrames++;
+    if (captureFrames >= 2) {
+      save(capturePath);
+      orbitAngle += 0.55;
+      renderView();
+      save(capturePath.replace(".png", "-orbit.png"));
+      println("SAVED " + capturePath);
+      exit();
+    }
+  }
+}
+
+void mouseMoved() {
+  pointer = true;
+}
+
+void mouseDragged() {
+  pointer = true;
 }
 
 // load the orb sprite sheet and convert into images
