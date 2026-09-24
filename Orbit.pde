@@ -73,6 +73,7 @@ class Orbit {
   }
   
   void renderGhost() {
+    if (dimensional && !drawingFloor) return;
     // render stroke of object
     stroke(ghostStroke);
     noFill();

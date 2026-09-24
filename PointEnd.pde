@@ -337,6 +337,7 @@ void renderBackground() {
   }  
   
   void renderGhost() {
+    if (dimensional && !drawingFloor) return;
     if (type==0) {
       stroke(ghostStroke);
       fill(0);

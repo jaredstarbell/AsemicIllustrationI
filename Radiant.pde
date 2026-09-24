@@ -40,6 +40,7 @@ class Radiant {
   }
   
   void renderGhost() {
+    if (dimensional && !drawingFloor) return;
     stroke(ghostStroke);
     line(ax,ay,bx,by);
     stroke(lightStroke);

@@ -3,9 +3,33 @@
 //   Jared S Tarbell
 //   September 13, 2020
 //   The Treehouse, Orcas Island, WA
+//
+// the plan is drawn first, then stood up. orbits and radiants
+// rise off that sheet, and the end glyphs are rebuilt as small
+// projected, sometimes rotated solids. color is a single ink,
+// used only on a few edges.
+//
+// drag to orbit. arrows orbit too. comma and period dolly.
+// 2 flattens back to the plan, 3 returns to the model.
+// e pauses growth, space starts over, f saves a frame.
 
 PGraphics bg;
 PGraphics spg;
+
+boolean dimensional = true;
+boolean drawingFloor = false;
+boolean capture = false;
+String capturePath = "output/asemic.png";
+int captureSeed = -1;
+int settleSteps = 160;
+int growSteps = 0;
+int captureFrames = 0;
+
+float camAzimuth = 0.68;
+float camElevation = 0.54;
+float camDistMul = 1.34;
+float camDistance = 1600;
+float camLookUp = 42;
 
 ArrayList<PointSource> psources = new ArrayList<PointSource>();
 ArrayList<Chord> chords = new ArrayList<Chord>();
@@ -36,12 +60,23 @@ int snumPointEnds = 1000000000;
 
 GoodPalette pal;
 
+void settings() {
+  size(1500, 1040, P3D);
+  smooth(4);
+}
+
 void setup() {
-  //size(1000,1000,FX2D);
-  fullScreen(FX2D);
   background(0);
   noFill();
   strokeWeight(2.0);
+  hint(DISABLE_DEPTH_TEST);
+
+  // framing used for the stood-up drawing. args can override.
+  camAzimuth = radians(38);
+  camElevation = radians(36);
+  camDistMul = 1.62;
+  camLookUp = 22;
+  applyArgs();
   
   pal = new GoodPalette(512);
   //pal.readXML("jacksonFloor.xml",256);
@@ -52,6 +87,7 @@ void setup() {
   //pal.readXML("jacksonWhiteLight.xml",256);
   pal.pumpBlack(48);
   pal.pumpWhite(24);
+  chooseInk();
   
   colorClear = color(255,32);
   colorStroke = color(255,173);
@@ -61,8 +97,30 @@ void setup() {
   
   buildOrbs();
   imageMode(CENTER);
+  camDistance = width * camDistMul;
   
   reset();
+}
+
+void applyArgs() {
+  if (args == null) return;
+  for (String a : args) {
+    if (a == null) continue;
+    if (a.equals("--flat")) dimensional = false;
+    else if (a.equals("--capture")) capture = true;
+    else if (a.startsWith("--out=")) capturePath = a.substring(6);
+    else if (a.startsWith("--steps=")) settleSteps = parseInt(a.substring(8));
+    else if (a.startsWith("--seed=")) captureSeed = parseInt(a.substring(7));
+    else if (a.startsWith("--az=")) camAzimuth = radians(float(a.substring(5)));
+    else if (a.startsWith("--el=")) camElevation = radians(float(a.substring(5)));
+    else if (a.startsWith("--dist=")) camDistMul = float(a.substring(7));
+    else if (a.startsWith("--look=")) camLookUp = float(a.substring(7));
+    else if (a.startsWith("--rise=")) riseScale = float(a.substring(7));
+    else if (a.startsWith("--icon=")) iconScale = float(a.substring(7));
+    else if (a.startsWith("--accent=")) accentRate = float(a.substring(9));
+  }
+  if (captureSeed >= 0) randomSeed(captureSeed);
+  println("dimensional " + dimensional + " seed " + captureSeed + " steps " + settleSteps);
 }
 
 void reset() {
@@ -95,6 +153,7 @@ void reset() {
   
   snumOrbits = 1000000000;   // max int
   snumPointEnds = 1000000000;
+  growSteps = 0;
 
   
   // single distribution
@@ -157,26 +216,53 @@ void reset() {
 }
 
 void draw() {
-    
-  if (expand) substitute();
-
-  spg.beginDraw();
-  int kmax = 1;
-  if (!expand) kmax = 10;    // if not expanding, render sand painters faster
-  for (int k=0;k<kmax;k++) {
-    if (snumOrbits<orbits.size()) {
-      orbits.get(snumOrbits).renderSP();
-      snumOrbits++;
-    }
-    if (snumPointEnds<pends.size()) {
-      pends.get(snumPointEnds).renderSP();
-      snumPointEnds++;
+  boolean settled = capture && growSteps >= settleSteps;
+  if (expand && !settled) {
+    int burst = capture ? settleSteps : 1;
+    for (int i = 0; i < burst; i++) {
+      substitute();
+      growSteps++;
+      if (capture && growSteps >= settleSteps) break;
     }
   }
-  spg.endDraw();
+
+  if (dimensional) {
+    renderScene();
+  } else {
+    spg.beginDraw();
+    int kmax = 1;
+    if (!expand) kmax = 10;    // if not expanding, render sand painters faster
+    for (int k=0;k<kmax;k++) {
+      if (snumOrbits<orbits.size()) {
+        orbits.get(snumOrbits).renderSP();
+        snumOrbits++;
+      }
+      if (snumPointEnds<pends.size()) {
+        pends.get(snumPointEnds).renderSP();
+        snumPointEnds++;
+      }
+    }
+    spg.endDraw();
+    // p3d does not keep the previous frame, so the plan is redrawn whole
+    background(0);
+    renderGhost();
+    imageMode(CORNER);
+    image(spg, 0, 0);
+    imageMode(CENTER);
+  }
   
   // color brightness oscillates as eons go
   colorStroke = color(255,random(222,255));
+
+  if (capture && growSteps >= settleSteps) {
+    captureFrames++;
+    if (captureFrames >= 3) {
+      println("orbits " + orbits.size() + " radiants " + radiants.size() + " ends " + pends.size() + " sources " + psources.size());
+      save(capturePath);
+      println("SAVED " + capturePath);
+      exit();
+    }
+  }
 }
 
 // load the orb sprite sheet and convert into images
@@ -199,6 +285,7 @@ void renderAll() {
 }
 
 void renderGhost() {
+  if (dimensional && !drawingFloor) return;
   for (Chord chd:chords) chd.renderGhost();
   for (Orbit orb:orbits) orb.renderGhost();
   for (Radiant rad:radiants) rad.renderGhost();
@@ -518,7 +605,32 @@ void disconnectStars() {
 }
 
 
+void mouseDragged() {
+  if (!dimensional) return;
+  camAzimuth += (mouseX - pmouseX) * 0.008;
+  camElevation = constrain(camElevation + (pmouseY - mouseY) * 0.006, 0.16, 1.25);
+}
+
 void keyPressed() {
+  if (keyCode == LEFT) { camAzimuth -= 0.08; return; }
+  if (keyCode == RIGHT) { camAzimuth += 0.08; return; }
+  if (keyCode == UP) { camElevation = min(1.25, camElevation + 0.05); return; }
+  if (keyCode == DOWN) { camElevation = max(0.16, camElevation - 0.05); return; }
+  if (key == ',' || key == '<') { camDistance *= 1.06; return; }
+  if (key == '.' || key == '>') { camDistance *= 0.94; return; }
+  if (key == '2') {
+    dimensional = false;
+    background(0);
+    renderGhost();
+    return;
+  }
+  if (key == '3') { dimensional = true; return; }
+  if (key == 'f' || key == 'F') {
+    saveFrame("output/asemic-####.png");
+    println("saved frame");
+    return;
+  }
+
   int mult = 50;
   if (key==' ') {
     reset(); 

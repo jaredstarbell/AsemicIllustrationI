@@ -35,6 +35,7 @@ class PointSource {
   }
   
   void renderGhost() {
+    if (dimensional && !drawingFloor) return;
     stroke(ghostStroke);
     fill(0);
     ellipse(x,y,w,w);
